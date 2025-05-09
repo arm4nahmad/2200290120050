@@ -18,7 +18,7 @@ Clone the repository:
 bash
 Copy
 Edit
-git clone https://github.com/arm4nahmad/average-calculator-service.git
+git clone https://github.com/arm4nahmad/2200290120050.git
 cd average-calculator-service
 Install the required dependencies:
 
