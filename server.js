@@ -4,14 +4,17 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 9876;
 
+// Constants
 const WINDOW_SIZE = 10;
-const BEARER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQ2Nzk4MDU3LCJpYXQiOjE3NDY3OTc3NTcsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6ImQxYjFlNjI1LWU1NDItNGUwYi04NGJlLWM4MzMyOGNkYjA3MSIsInN1YiI6ImFybWFuLjIyMjZjczEwMjFAa2lldC5lZHUifSwiZW1haWwiOiJhcm1hbi4yMjI2Y3MxMDIxQGtpZXQuZHUiLCJuYW1lIjoiYXJtYW4gYWhtYWQiLCJyb2xsTm8iOiIyMjAwMjkwMTIwMDUwIiwiYWNjZXNzQ29kZSI6IlN4VmphIiwia2xpZW50SUQiOiJkMWIxZTYyNS1lNTQyLTRlMGI-ODRiZS1jODMzMjhkYjA3MSIsImNsaWVudFNlY3JldCI6IktHbUNNRXpwcVJwZXlZWXoifQ.LL03qiNT29oTrCklCI1bpumnviaGHsWwjGDEATnZF-k'; // **IMPORTANT**: Keep your token secure.
+const BEARER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQ2ODAyNzk1LCJpYXQiOjE3NDY4MDI0OTUsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6ImQxYjFlNjI1LWU1NDItNGUwYi04NGJlLWM4MzMyOGNkYjA3MSIsInN1YiI6ImFybWFuLjIyMjZjczEwMjFAa2lldC5lZHUifSwiZW1haWwiOiJhcm1hbi4yMjI2Y3MxMDIxQGtpZXQuZWR1IiwibmFtZSI6ImFybWFuIGFobWFkIiwicm9sbE5vIjoiMjIwMDI5MDEyMDA1MCIsImFjY2Vzc0NvZGUiOiJTeFZlamEiLCJjbGllbnRJRCI6ImQxYjFlNjI1LWU1NDItNGUwYi04NGJlLWM4MzMyOGNkYjA3MSIsImNsaWVudFNlY3JldCI6ImtHbUNNRXpwcVJwZXlZWXoifQ.pIjR1tzs_o3GRHW3sg2aQyEoAFw0KEGzktOBECHeUfQ';
 const TEST_SERVER_BASE_URL = 'http://20.244.56.144/evaluation-service';
 
+// Storage for numbers
 let numberWindow = [];
 
 app.use(express.json());
 
+// Fetch numbers from third-party API
 async function fetchNumbersFromServer(numberType) {
     const typeToPath = {
         'p': '/primes',
@@ -30,9 +33,9 @@ async function fetchNumbersFromServer(numberType) {
     try {
         const response = await axios.get(url, {
             headers: {
-                Authorization: `Bearer ${BEARER_TOKEN}`, // Use the token here
+                Authorization: `Bearer ${BEARER_TOKEN}`,
             },
-            timeout: 450,
+            timeout: 450, // setting timeout for quick failure
         });
 
         if (response.data && Array.isArray(response.data.numbers)) {
@@ -40,7 +43,9 @@ async function fetchNumbersFromServer(numberType) {
         }
         return [];
     } catch (error) {
-        if (axios.isCancel(error)) {
+        if (error.response && error.response.status === 503) {
+            console.error(`503 Service Unavailable: ${url}`);
+        } else if (axios.isCancel(error)) {
             console.error(`Request to ${url} was canceled: ${error.message}`);
         } else if (error.response) {
             console.error(
@@ -56,10 +61,13 @@ async function fetchNumbersFromServer(numberType) {
     }
 }
 
+
+// Health Check
 app.get('/', (req, res) => {
-    res.send('Average Calculator Microservice is running!');
+    res.send('✅ Average Calculator Microservice is running!');
 });
 
+// Main API
 app.get('/numbers/:numberid', async (req, res) => {
     const { numberid } = req.params;
     const validIds = ['p', 'f', 'e', 'r'];
@@ -70,8 +78,9 @@ app.get('/numbers/:numberid', async (req, res) => {
             .json({ error: "Invalid number ID. Must be 'p', 'f', 'e', or 'r'." });
     }
 
-    const requestProcessingStartTime = Date.now();
+    const requestStartTime = Date.now();
     const windowPrevState = [...numberWindow];
+
     const fetchedNumbers = await fetchNumbersFromServer(numberid);
 
     if (fetchedNumbers && fetchedNumbers.length > 0) {
@@ -80,9 +89,9 @@ app.get('/numbers/:numberid', async (req, res) => {
         uniqueNumbersFromFetch.forEach((num) => {
             if (!numberWindow.includes(num)) {
                 if (numberWindow.length >= WINDOW_SIZE) {
-                    numberWindow.shift();
+                    numberWindow.shift(); // Remove oldest
                 }
-                numberWindow.push(num);
+                numberWindow.push(num); // Add newest
             }
         });
     }
@@ -101,22 +110,18 @@ app.get('/numbers/:numberid', async (req, res) => {
         avg: parseFloat(avg.toFixed(2)),
     };
 
-    const requestProcessingEndTime = Date.now();
-    const duration = requestProcessingEndTime - requestProcessingStartTime;
-    console.log(
-        `Processed /numbers/${numberid} in ${duration}ms. Window: ${windowCurrState.join(
-            ', '
-        )}`
-    );
+    const requestEndTime = Date.now();
+    const duration = requestEndTime - requestStartTime;
+    console.log(`Processed /numbers/${numberid} in ${duration}ms.`);
 
     if (duration > 500) {
-        console.warn(`WARNING: Response for ${numberid} took ${duration}ms.`);
+        console.warn(`⚠️ WARNING: Response for ${numberid} took ${duration}ms.`);
     }
 
     return res.json(responseJson);
 });
 
+// Start server
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
